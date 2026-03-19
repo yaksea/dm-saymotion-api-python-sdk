@@ -7,6 +7,7 @@ from dm.saymotion.client import SaymotionClient, Animate3DClient
 from dm.saymotion.async_client import AsyncSaymotionClient, AsyncAnimate3DClient
 from dm.saymotion.data.params import (
     ProcessParams,
+    TimeInterval,
     Text2MotionParams,
     RenderParams,
     RerunParams,
@@ -31,9 +32,8 @@ from dm.saymotion.exceptions import (
     AuthenticationError,
     APIError,
     ValidationError,
+    TimeoutError,
 )
-
-__version__ = "2.0.0"
 
 __all__ = [
     # Clients
@@ -43,6 +43,7 @@ __all__ = [
     "AsyncAnimate3DClient",
     # Parameters
     "ProcessParams",
+    "TimeInterval",
     "Text2MotionParams",
     "RenderParams",
     "RerunParams",
@@ -68,4 +69,5 @@ __all__ = [
     "AuthenticationError",
     "APIError",
     "ValidationError",
+    "TimeoutError",
 ]

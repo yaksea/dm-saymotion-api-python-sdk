@@ -17,10 +17,10 @@ from dm.saymotion import (
     ProgressCallbackData,
 )
 
-# Configuration - replace with your credentials
-API_SERVER_URL = "https://service.deepmotion.com"
-CLIENT_ID = "your_client_id"
-CLIENT_SECRET = "your_client_secret"
+# Configuration - replace with your credentials or set environment variables
+API_SERVER_URL = os.environ.get("DM_API_SERVER_URL", "https://service.deepmotion.com")
+CLIENT_ID = os.environ.get("DM_CLIENT_ID", "your_client_id")
+CLIENT_SECRET = os.environ.get("DM_CLIENT_SECRET", "your_client_secret")
 
 OUTPUT_DIR = "./output"
 
@@ -84,7 +84,6 @@ def main():
 
     # Optional: customize render params (backdrop, shadow, etc.)
     params = RenderParams(
-        t2m_rid=t2m_rid,
         variant_id=variant_id,
         backdrop="studio",
         shadow=1,
@@ -96,7 +95,6 @@ def main():
 
     rid = client.start_render_job(
         t2m_rid=t2m_rid,
-        variant_id=variant_id,
         params=params,
         result_callback=on_result,
         progress_callback=on_progress,

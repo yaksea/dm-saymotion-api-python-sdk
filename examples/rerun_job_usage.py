@@ -3,18 +3,19 @@
 This example demonstrates how to rerun a previous text2motion job.
 """
 
+import os
+
 from dm.saymotion import (
     SaymotionClient,
-    RerunParams,
     Status,
     ProgressCallbackData,
-    ResultCallbackData,
+    ResultCallbackData, RerunParams,
 )
 
-# Configuration
-API_SERVER_URL = "https://service.deepmotion.com"
-CLIENT_ID = "your_client_id"
-CLIENT_SECRET = "your_client_secret"
+# Configuration - replace with your credentials or set environment variables
+API_SERVER_URL = os.environ.get("DM_API_SERVER_URL", "https://service.deepmotion.com")
+CLIENT_ID = os.environ.get("DM_CLIENT_ID", "your_client_id")
+CLIENT_SECRET = os.environ.get("DM_CLIENT_SECRET", "your_client_secret")
 
 
 def on_progress(data: ProgressCallbackData):
@@ -63,21 +64,22 @@ def main():
 
     print(f"Rerunning job RID: {rid}, variant_id: {variant_id}")
 
-    params = RerunParams(
-        t2m_rid=rid,
-        variant_id=variant_id,
-        rerun=1,
-    )
+    # Get a character model ID (use stockModel for built-in models)
+    all_models = client.list_character_models(stock_model="deepmotion")
+    if not all_models:
+        print("No models found")
+        return
+    model_id = all_models[0].id
 
     try:
         new_rid = client.rerun_job(
             t2m_rid=rid,
-            variant_id=variant_id,
-            params=params,
+            model_id=model_id,
+            params=RerunParams(variant_id=variant_id),
             result_callback=on_result,
             progress_callback=on_progress,
         )
-        print(f"Rerun job RID: {new_rid}")
+        print(f"New RID of rerun job : {new_rid}")
 
     except Exception as e:
         print(f"Error rerunning job: {e}")

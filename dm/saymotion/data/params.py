@@ -6,35 +6,45 @@ from typing import List, Optional, Dict, Tuple, Any
 
 
 @dataclass
-class Text2MotionParams:
-    """Parameters for text2motion (regular animation generation) job.
+class TimeInterval:
+    """A time interval with start and end times in seconds.
 
     Example:
-        params = Text2MotionParams(
+        interval = TimeInterval(start=0.5, end=2.0)
+    """
+
+    start: float = 0.0
+    end: float = 0.0
+
+    def to_dict(self) -> Dict[str, float]:
+        return {"start": self.start, "end": self.end}
+
+
+@dataclass
+class Text2MotionParams:
+    """Optional parameters for text2motion job.
+
+    Required parameters (prompt, model_id) are on the method signature.
+
+    Example:
+        rid = client.start_new_job(
             prompt="A person walking",
             model_id="model_id",
-            requested_animation_duration=5.0,
+            params=Text2MotionParams(requested_animation_duration=5.0),
         )
     """
 
-    prompt: str = ""
-    model_id: str = ""
-    dis: Optional[str] = None  # "s" to turn off simulation
+    physics_filter: Optional[bool] = None  # "s" to turn off simulation
     foot_locking_mode: Optional[str] = None  # "auto", "always", "never", "grounding"
     pose_filtering_strength: Optional[float] = None  # 0.0-1.0
     skip_fbx: Optional[int] = None  # 1 to skip FBX
     num_variant: Optional[int] = None  # 1-8
     requested_animation_duration: Optional[float] = None  # seconds
 
-    def to_params_list(self) -> List[str]:
-        """Convert to list of parameter strings for API."""
-        params = []
-        if self.prompt:
-            params.append(f'prompt="{self.prompt}"')
-        if self.model_id:
-            params.append(f"model={self.model_id}")
-        if self.dis is not None:
-            params.append(f"dis={self.dis}")
+    def _append_optional_params(self, params: List[str]) -> None:
+        """Append optional text2motion parameters to the list."""
+        if self.physics_filter is False:
+            params.append("dis=s")
         if self.foot_locking_mode:
             params.append(f"footLockingMode={self.foot_locking_mode}")
         if self.pose_filtering_strength is not None:
@@ -45,14 +55,26 @@ class Text2MotionParams:
             params.append(f"numVariant={self.num_variant}")
         if self.requested_animation_duration is not None:
             params.append(f"requestedAnimationDuration={self.requested_animation_duration}")
+
+    def to_params_list(self, prompt: str, model_id: str) -> List[str]:
+        """Convert to list of parameter strings for API.
+
+        Args:
+            prompt: Text prompt for motion generation (required).
+            model_id: Character model ID (required).
+        """
+        params = [f'prompt="{prompt}"', f"model={model_id}"]
+        self._append_optional_params(params)
         return params
 
 
 @dataclass
 class RenderParams:
-    """Parameters for render processor (animation to video)."""
+    """Optional parameters for render processor (animation to video).
 
-    t2m_rid: str = ""
+    Required parameter (t2m_rid) is on the method signature.
+    """
+
     variant_id: Optional[int] = None
     bg_color: Optional[Tuple[int, int, int, int]] = None  # RGBA 0-255
     backdrop: Optional[str] = None  # "studio" or 2D backdrop name
@@ -60,11 +82,13 @@ class RenderParams:
     cam_mode: Optional[int] = None  # 0=Cinematic, 1=Fixed, 2=Face
     cam_horizontal_angle: Optional[float] = None  # -90 to +90 degrees
 
-    def to_params_list(self) -> List[str]:
-        """Convert to list of parameter strings for API."""
-        params = []
-        if self.t2m_rid:
-            params.append(f"t2m_rid={self.t2m_rid}")
+    def to_params_list(self, t2m_rid: str) -> List[str]:
+        """Convert to list of parameter strings for API.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job (required).
+        """
+        params = [f"t2m_rid={t2m_rid}"]
         if self.variant_id is not None:
             params.append(f"variant_id={self.variant_id}")
         if self.bg_color is not None:
@@ -84,18 +108,34 @@ class RenderParams:
 
 
 @dataclass
-class RerunParams:
-    """Parameters for rerun job."""
+class RerunParams(Text2MotionParams):
+    """Optional parameters for rerun job, extends Text2MotionParams.
 
-    t2m_rid: str = ""
+    Inherits all optional text2motion settings (physics_filter, foot_locking_mode,
+    pose_filtering_strength, skip_fbx, num_variant, requested_animation_duration).
+
+    Required parameters (t2m_rid, model_id) are on the method signature.
+
+    Example:
+        new_rid = client.rerun_job(
+            t2m_rid="rid",
+            model_id="model_id",
+            params=RerunParams(variant_id=1, physics_filter=False),
+        )
+    """
+
     variant_id: Optional[int] = None
     rerun: int = 1  # 0 or 1
 
-    def to_params_list(self) -> List[str]:
-        """Convert to list of parameter strings for API."""
-        params = []
-        if self.t2m_rid:
-            params.append(f"t2m_rid={self.t2m_rid}")
+    def to_params_list(self, t2m_rid: str, model_id: str) -> List[str]:  # type: ignore[override]
+        """Convert to list of parameter strings for API.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job (required).
+            model_id: Character model ID (required).
+        """
+        params = [f"t2m_rid={t2m_rid}", f"model={model_id}"]
+        self._append_optional_params(params)
         if self.variant_id is not None:
             params.append(f"variant_id={self.variant_id}")
         params.append(f'rerunRequest={{"rerun": {self.rerun}}}')
@@ -104,59 +144,73 @@ class RerunParams:
 
 @dataclass
 class InpaintingParams:
-    """Parameters for inpainting job."""
+    """Optional parameters for inpainting job.
 
-    t2m_rid: str = ""
+    Required parameters (t2m_rid, prompt, intervals) are on the method signature.
+    """
+
     variant_id: Optional[int] = None
-    prompt: str = ""
-    intervals: List[Dict[str, float]] = field(default_factory=list)  # [{"start": x, "end": y}]
 
-    def to_params_list(self) -> List[str]:
-        """Convert to list of parameter strings for API."""
-        params = []
-        if self.t2m_rid:
-            params.append(f"t2m_rid={self.t2m_rid}")
+    def to_params_list(
+        self, t2m_rid: str, prompt: str, intervals: List[TimeInterval],
+    ) -> List[str]:
+        """Convert to list of parameter strings for API.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job (required).
+            prompt: Inpainting prompt (required).
+            intervals: Time intervals to inpaint (required).
+        """
+        params = [f"t2m_rid={t2m_rid}"]
         if self.variant_id is not None:
             params.append(f"variant_id={self.variant_id}")
-        req = {"prompt": self.prompt, "intervals": self.intervals}
+        req = {"prompt": prompt, "intervals": [iv.to_dict() for iv in intervals]}
         params.append(f"inPaintingRequest={json.dumps(req)}")
         return params
 
 
 @dataclass
 class MergingParams:
-    """Parameters for merging job."""
+    """Optional parameters for merging job.
 
-    t2m_rid: str = ""
+    Required parameters (t2m_rid, prompt) are on the method signature.
+    """
+
     variant_id: Optional[int] = None
     edit_request: Optional[Dict[str, int]] = None  # {"numTrimLeft": x, "numTrimRight": y}
-    prompt: str = ""
     blend_duration: Optional[float] = None
 
-    def to_params_list(self) -> List[str]:
-        """Convert to list of parameter strings for API."""
-        params = []
-        if self.t2m_rid:
-            params.append(f"t2m_rid={self.t2m_rid}")
+    def to_params_list(self, t2m_rid: str, prompt: str) -> List[str]:
+        """Convert to list of parameter strings for API.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job (required).
+            prompt: Merging prompt (required).
+        """
+        params = [f"t2m_rid={t2m_rid}"]
         if self.variant_id is not None:
             params.append(f"variant_id={self.variant_id}")
-        req = {
-            "t2m_rid": self.t2m_rid,
-            "variant_id": self.variant_id,
-            "editRequest": self.edit_request or {},
-            "prompt": self.prompt,
-            "blendDuration": self.blend_duration,
+        req: Dict[str, Any] = {
+            "t2m_rid": t2m_rid,
+            "prompt": prompt,
         }
-        req = {k: v for k, v in req.items() if v is not None and v != "" and v != {}}
+        if self.variant_id is not None:
+            req["variant_id"] = self.variant_id
+        if self.edit_request:
+            req["editRequest"] = self.edit_request
+        if self.blend_duration is not None:
+            req["blendDuration"] = self.blend_duration
         params.append(f"mergingRequest={json.dumps(req)}")
         return params
 
 
 @dataclass
 class LoopParams:
-    """Parameters for loop job."""
+    """Optional parameters for loop job.
 
-    t2m_rid: str = ""
+    Required parameter (t2m_rid) is on the method signature.
+    """
+
     variant_id: Optional[int] = None
     prompt: Optional[str] = None
     num_reps: int = 1
@@ -167,11 +221,13 @@ class LoopParams:
     fix_root_orientation: Optional[int] = None  # 0 or 1
     fix_across_entire_motion: Optional[int] = None  # 0 or 1
 
-    def to_params_list(self) -> List[str]:
-        """Convert to list of parameter strings for API."""
-        params = []
-        if self.t2m_rid:
-            params.append(f"t2m_rid={self.t2m_rid}")
+    def to_params_list(self, t2m_rid: str) -> List[str]:
+        """Convert to list of parameter strings for API.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job (required).
+        """
+        params = [f"t2m_rid={t2m_rid}"]
         if self.variant_id is not None:
             params.append(f"variant_id={self.variant_id}")
         req = {}
@@ -196,18 +252,23 @@ class LoopParams:
 
 @dataclass
 class RefineParams:
-    """Parameters for refine job."""
+    """Optional parameters for refine job.
 
-    t2m_rid: str = ""
+    Required parameter (t2m_rid) is on the method signature.
+    """
+
     variant_id: Optional[int] = None
     prompt: Optional[str] = None
     creativity: Optional[float] = None  # 0.0-1.0
+    num_variant: Optional[int] = None  # 1-8
 
-    def to_params_list(self) -> List[str]:
-        """Convert to list of parameter strings for API."""
-        params = []
-        if self.t2m_rid:
-            params.append(f"t2m_rid={self.t2m_rid}")
+    def to_params_list(self, t2m_rid: str) -> List[str]:
+        """Convert to list of parameter strings for API.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job (required).
+        """
+        params = [f"t2m_rid={t2m_rid}"]
         if self.variant_id is not None:
             params.append(f"variant_id={self.variant_id}")
         req = {}
@@ -215,6 +276,8 @@ class RefineParams:
             req["prompt"] = self.prompt
         if self.creativity is not None:
             req["creativity"] = self.creativity
+        if self.num_variant is not None:
+            params.append(f"numVariant={self.num_variant}")
         params.append(f"refineRequest={json.dumps(req)}")
         return params
 

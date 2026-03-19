@@ -21,16 +21,13 @@ client = SaymotionClient(
     client_secret="your_client_secret",
 )
 
-# Check credit balance
 balance = client.get_credit_balance()
 print(f"Credit balance: {balance}")
 
-# Get a character model
 all_models = client.list_character_models(stock_model="deepmotion")
 model_id = all_models[0].id if all_models else None
 
 
-# Callbacks
 def on_progress(data):
     if data.position_in_queue:
         print(f"Position in queue: {data.position_in_queue}")
@@ -41,29 +38,22 @@ def on_progress(data):
 def on_result(data):
     if data.result:
         print("Job completed successfully!")
-        print(f"Output: {data.result.output}")
         client.download_job(data.rid, output_dir="./output")
     elif data.error:
         print(f"Job failed: {data.error.message}")
 
 
-# Start text2motion job
 if model_id:
-    params = Text2MotionParams(
-        prompt="A person walking forward slowly",
-        model_id=model_id,
-        requested_animation_duration=5.0,
-    )
-
-    print("Starting job...")
     rid = client.start_new_job(
         prompt="A person walking forward slowly",
         model_id=model_id,
-        params=params,
+        params=Text2MotionParams(requested_animation_duration=5.0),
         result_callback=on_result,
         progress_callback=on_progress,
     )
     print(f"Job finished, RID: {rid}")
+
+client.close()
 ```
 
 ### Asynchronous Usage
@@ -89,12 +79,6 @@ async def main():
         if not model_id:
             return
 
-        params = Text2MotionParams(
-            prompt="A person walking forward slowly",
-            model_id=model_id,
-            requested_animation_duration=5.0,
-        )
-
         def on_progress(data):
             if data.position_in_queue:
                 print(f"Position in queue: {data.position_in_queue}")
@@ -111,7 +95,7 @@ async def main():
         rid = await client.start_new_job(
             prompt="A person walking forward slowly",
             model_id=model_id,
-            params=params,
+            params=Text2MotionParams(requested_animation_duration=5.0),
             result_callback=on_result,
             progress_callback=on_progress,
         )
@@ -121,53 +105,56 @@ async def main():
 asyncio.run(main())
 ```
 
+## Configuration
+
+Credentials can be set via environment variables:
+
+```bash
+export DM_API_SERVER_URL="https://service.deepmotion.com"
+export DM_CLIENT_ID="your_client_id"
+export DM_CLIENT_SECRET="your_client_secret"
+```
+
 ## API Reference
 
 ### Client Initialization
 
-```python
-# Synchronous client
-client = SaymotionClient(
-    api_server_url: str,
-    client_id: str,
-    client_secret: str,
-    timeout: Optional[int],
-)
+Both clients support the same constructor parameters:
 
-# Asynchronous client
-async with AsyncSaymotionClient(
-    api_server_url: str,
-    client_id: str,
-    client_secret: str,
-    timeout: Optional[int],
-) as client:
-    ...
-```
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `api_server_url` | str | Yes | Base URL of the API server |
+| `client_id` | str | Yes | Client ID for authentication |
+| `client_secret` | str | Yes | Client secret for authentication |
+| `timeout` | int | No | Request timeout in seconds |
+
+`SaymotionClient` supports context manager (`with` statement) and `close()`.
+`AsyncSaymotionClient` supports async context manager (`async with`) and `close()`.
 
 ### Character Model API
 
 | Method | Parameters | Returns | Description |
 |--------|------------|---------|-------------|
 | `list_character_models` | model_id?, search_token?, stock_model? | List[CharacterModel] | List available models |
-| `upload_character_model` | source, name?, create_thumb? | str (model_id) | Upload or store a model |
+| `upload_character_model` | source, name?, create_thumb? | str (model_id) | Upload or store a model. `source` can be a local file path or HTTP URL |
 | `delete_character_model` | model_id | int (count) | Delete a model |
 
 ### Job API
 
 | Method | Parameters | Returns | Description |
 |--------|------------|---------|-------------|
-| `start_new_job` | prompt, model_id, params?, result_callback?, progress_callback?, poll_interval?, blocking?, timeout? | str (rid) | Start text2motion job |
-| `start_render_job` | t2m_rid, variant_id, params?, ... | str (rid) | Render animation to video |
-| `start_inpainting_job` | params (InpaintingParams), ... | str (rid) | Inpainting job |
-| `start_merging_job` | params (MergingParams), ... | str (rid) | Merging job |
-| `start_loop_job` | params (LoopParams), ... | str (rid) | Loop job |
-| `start_refine_job` | params (RefineParams), ... | str (rid) | Refine job |
+| `start_new_job` | **prompt**, **model_id**, params?(Text2MotionParams), result_callback?, progress_callback?, poll_interval?, blocking?, timeout? | str (rid) | Start text2motion job |
+| `start_render_job` | **t2m_rid**, params?(RenderParams), result_callback?, progress_callback?, poll_interval?, blocking?, timeout? | str (rid) | Render animation to video |
+| `start_inpainting_job` | **t2m_rid**, **prompt**, **intervals**(List[TimeInterval]), params?(InpaintingParams), result_callback?, progress_callback?, poll_interval?, blocking?, timeout? | str (rid) | Inpainting job |
+| `start_merging_job` | **t2m_rid**, **prompt**, params?(MergingParams), result_callback?, progress_callback?, poll_interval?, blocking?, timeout? | str (rid) | Merging job |
+| `start_loop_job` | **t2m_rid**, params?(LoopParams), result_callback?, progress_callback?, poll_interval?, blocking?, timeout? | str (rid) | Loop job |
+| `start_refine_job` | **t2m_rid**, params?(RefineParams), result_callback?, progress_callback?, poll_interval?, blocking?, timeout? | str (rid) | Refine job |
 | `import_animate3d_job` | rid, model, params | str (rid) | Import Animate3D job |
-| `rerun_job` | t2m_rid, variant_id?, params?, ... | str (new_rid) | Rerun with rerunRequest |
+| `rerun_job` | **t2m_rid**, **model_id**, params?(RerunParams), result_callback?, progress_callback?, poll_interval?, blocking?, timeout? | str (new_rid) | Rerun with rerunRequest |
 | `cancel_job` | rid | bool | Cancel job |
 | `get_job_status` | rid | JobStatus | Get job status |
 | `list_jobs` | status?, processor? | List[Job] | List jobs |
-| `download_job` | rid, output_dir?, variant_id? | DownloadLink | Download results |
+| `download_job` | rid, output_dir?, variant_id? | DownloadLink | Download results. If `output_dir` is set, files are saved to disk |
 
 ### Prompt API
 
@@ -184,32 +171,116 @@ async with AsyncSaymotionClient(
 
 ## Parameter Classes
 
-### Text2MotionParams
+### Text2MotionParams (optional settings for `start_new_job`)
+
+Required params `prompt` and `model_id` are on the method signature.
 
 ```python
 Text2MotionParams(
-    prompt="A person walking",
-    model_id="model_id",
-    dis=None,                      # "s" to turn off simulation
-    foot_locking_mode="auto",      # "auto", "always", "never", "grounding"
-    pose_filtering_strength=0.0,   # 0.0-1.0
-    skip_fbx=None,                 # 1 to skip FBX
-    num_variant=1,                 # 1-8
-    requested_animation_duration=None,  # seconds
+    physics_filter=None,                 # False to turn off simulation (dis=s)
+    foot_locking_mode="auto",            # "auto", "always", "never", "grounding"
+    pose_filtering_strength=0.0,         # 0.0-1.0
+    skip_fbx=None,                       # 1 to skip FBX generation
+    num_variant=1,                       # 1-8 variants
+    requested_animation_duration=None,   # seconds (0 means AI decides)
 )
 ```
 
-### RenderParams
+### RenderParams (optional settings for `start_render_job`)
+
+Required param `t2m_rid` is on the method signature.
 
 ```python
 RenderParams(
+    variant_id=1,                        # variant to render
+    bg_color=(0, 177, 64, 0),            # RGBA for green screen
+    backdrop="studio",                   # "studio" or 2D backdrop name
+    shadow=1,                            # 0=off, 1=on
+    cam_mode=0,                          # 0=Cinematic, 1=Fixed, 2=Face
+    cam_horizontal_angle=0.0,            # -90 to +90 degrees
+)
+```
+
+### RerunParams (optional settings for `rerun_job`, extends Text2MotionParams)
+
+Inherits all `Text2MotionParams` optional settings. Required params `t2m_rid` and `model_id` are on the method signature.
+
+```python
+RerunParams(
+    variant_id=1,                        # variant to rerun
+    rerun=1,                             # 0 or 1
+    # inherited from Text2MotionParams:
+    physics_filter=None,                 # False to turn off simulation
+    foot_locking_mode="auto",            # "auto", "always", "never", "grounding"
+    pose_filtering_strength=0.0,         # 0.0-1.0
+    skip_fbx=None,                       # 1 to skip FBX generation
+    num_variant=1,                       # 1-8 variants
+    requested_animation_duration=None,   # seconds
+)
+```
+
+### TimeInterval
+
+```python
+TimeInterval(start=0.5, end=2.0)
+```
+
+### InpaintingParams (optional settings for `start_inpainting_job`)
+
+Required params `t2m_rid`, `prompt`, `intervals` are on the method signature.
+`intervals` is a `List[TimeInterval]`.
+
+```python
+from dm.saymotion import TimeInterval, InpaintingParams
+
+client.start_inpainting_job(
     t2m_rid="rid",
+    prompt="modified motion",
+    intervals=[TimeInterval(start=0.5, end=2.0)],
+    params=InpaintingParams(variant_id=1),
+)
+```
+
+### MergingParams (optional settings for `start_merging_job`)
+
+Required params `t2m_rid`, `prompt` are on the method signature.
+
+```python
+MergingParams(
     variant_id=1,
-    bg_color=(0, 177, 64, 0),      # RGBA for green screen
-    backdrop="studio",             # or 2D backdrop name
-    shadow=1,                      # 0=off, 1=on
-    cam_mode=0,                    # 0=Cinematic, 1=Fixed, 2=Face
-    cam_horizontal_angle=0.0,      # -90 to +90 degrees
+    edit_request={"numTrimLeft": 5, "numTrimRight": 5},
+    blend_duration=0.5,
+)
+```
+
+### LoopParams (optional settings for `start_loop_job`)
+
+Required param `t2m_rid` is on the method signature.
+
+```python
+LoopParams(
+    variant_id=1,
+    prompt="looping motion",
+    num_reps=3,
+    blend_duration=0.5,
+    fix_root_mode="INTERPOLATION",       # "INTERPOLATION" or "LOCKED"
+    fix_root_position_altitude=0,        # 0 or 1
+    fix_root_position_horizontal=0,      # 0 or 1
+    fix_root_orientation=0,              # 0 or 1
+    fix_across_entire_motion=0,          # 0 or 1
+)
+```
+
+### RefineParams (optional settings for `start_refine_job`)
+
+Required param `t2m_rid` is on the method signature.
+
+```python
+RefineParams(
+    variant_id=1,
+    prompt="refined motion description",
+    creativity=0.5,                      # 0.0-1.0
+    num_variant=1,                       # 1-8 variants
 )
 ```
 
@@ -237,6 +308,21 @@ from dm.saymotion import (
     TimeoutError,
 )
 
+try:
+    rid = client.start_new_job(...)
+except AuthenticationError:
+    print("Invalid credentials")
+except TimeoutError as e:
+    print(f"Job timed out: {e}, RID: {e.rid}")
+except APIError as e:
+    print(f"API error: {e}, status: {e.status_code}")
+except ValidationError as e:
+    print(f"Invalid input: {e}")
+```
+
+In result callbacks:
+
+```python
 def on_result(data):
     if data.error:
         print(f"Job failed: {data.error.message} (Code: {data.error.code})")

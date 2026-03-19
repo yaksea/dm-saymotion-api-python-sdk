@@ -26,6 +26,7 @@ from dm.saymotion.data.params import (
     MergingParams,
     LoopParams,
     RefineParams,
+    TimeInterval,
 )
 from dm.saymotion.data.response import DownloadLink
 from dm.saymotion.exceptions import (
@@ -229,8 +230,10 @@ class AsyncSaymotionClient:
     async def _upload_file_to_gcs(
             self, gcs_url: str, file_path: str
     ) -> None:
-        with open(file_path, "rb") as f:
-            file_data = f.read()
+        loop = asyncio.get_event_loop()
+        file_data = await loop.run_in_executor(
+            None, lambda: open(file_path, "rb").read()
+        )
         headers = {
             "Content-Length": str(len(file_data)),
             "Content-Type": "application/octet-stream",
@@ -269,6 +272,44 @@ class AsyncSaymotionClient:
 
     # ==================== Job API ====================
 
+    async def _start_and_poll(
+            self,
+            processor: str,
+            params_list: List[str],
+            result_callback: Optional[
+                Callable[[ResultCallbackData], Optional[Awaitable[None]]]
+            ] = None,
+            progress_callback: Optional[
+                Callable[[ProgressCallbackData], Optional[Awaitable[None]]]
+            ] = None,
+            poll_interval: int = 5,
+            blocking: bool = True,
+            timeout: Optional[int] = None,
+    ) -> str:
+        """Submit a job and optionally poll for completion."""
+        rid = await self._process_job(processor, params_list)
+
+        if blocking or progress_callback or result_callback:
+            if blocking:
+                await self._poll_job(
+                    rid,
+                    result_callback=result_callback,
+                    progress_callback=progress_callback,
+                    poll_interval=poll_interval,
+                    timeout=timeout,
+                )
+            else:
+                asyncio.create_task(
+                    self._poll_job(
+                        rid,
+                        result_callback=result_callback,
+                        progress_callback=progress_callback,
+                        poll_interval=poll_interval,
+                        timeout=timeout,
+                    )
+                )
+        return rid
+
     async def start_new_job(
             self,
             prompt: str,
@@ -284,47 +325,28 @@ class AsyncSaymotionClient:
             blocking: bool = True,
             timeout: Optional[int] = None,
     ) -> str:
+        """Start a new text2motion job.
+
+        Args:
+            prompt: Text prompt for motion generation
+            model_id: Character model ID
+            params: Optional Text2MotionParams for additional settings
+        """
         if params is None:
-            params = Text2MotionParams(prompt=prompt, model_id=model_id)
-        else:
-            params = Text2MotionParams(
-                prompt=prompt,
-                model_id=model_id,
-                dis=params.dis,
-                foot_locking_mode=params.foot_locking_mode,
-                pose_filtering_strength=params.pose_filtering_strength,
-                skip_fbx=params.skip_fbx,
-                num_variant=params.num_variant,
-                requested_animation_duration=params.requested_animation_duration,
-            )
+            params = Text2MotionParams()
 
-        rid = await self._process_job("text2motion", params.to_params_list())
-
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                await self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                asyncio.create_task(
-                    self._poll_job(
-                        rid,
-                        result_callback=result_callback,
-                        progress_callback=progress_callback,
-                        poll_interval=poll_interval,
-                        timeout=timeout,
-                    )
-                )
-        return rid
+        return await self._start_and_poll(
+            "text2motion", params.to_params_list(prompt, model_id),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     async def start_render_job(
             self,
             t2m_rid: str,
-            variant_id: int,
             params: Optional[RenderParams] = None,
             result_callback: Optional[
                 Callable[[ResultCallbackData], Optional[Awaitable[None]]]
@@ -336,44 +358,28 @@ class AsyncSaymotionClient:
             blocking: bool = True,
             timeout: Optional[int] = None,
     ) -> str:
+        """Start render job (animation to video).
+
+        Args:
+            t2m_rid: Request ID of the text2motion job
+            params: Optional RenderParams for additional settings
+        """
         if params is None:
-            params = RenderParams(t2m_rid=t2m_rid, variant_id=variant_id)
-        else:
-            params = RenderParams(
-                t2m_rid=t2m_rid,
-                variant_id=variant_id,
-                bg_color=params.bg_color,
-                backdrop=params.backdrop,
-                shadow=params.shadow,
-                cam_mode=params.cam_mode,
-                cam_horizontal_angle=params.cam_horizontal_angle,
-            )
-        rid = await self._process_job("render", params.to_params_list())
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                await self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                asyncio.create_task(
-                    self._poll_job(
-                        rid,
-                        result_callback=result_callback,
-                        progress_callback=progress_callback,
-                        poll_interval=poll_interval,
-                        timeout=timeout,
-                    )
-                )
-        return rid
+            params = RenderParams()
+
+        return await self._start_and_poll(
+            "render", params.to_params_list(t2m_rid),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     async def rerun_job(
             self,
             t2m_rid: str,
-            variant_id: Optional[int] = None,
+            model_id: str,
             params: Optional[RerunParams] = None,
             result_callback: Optional[
                 Callable[[ResultCallbackData], Optional[Awaitable[None]]]
@@ -385,39 +391,30 @@ class AsyncSaymotionClient:
             blocking: bool = True,
             timeout: Optional[int] = None,
     ) -> str:
+        """Rerun a text2motion job.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job to rerun
+            params: Optional RerunParams for additional settings
+        """
         if params is None:
-            params = RerunParams(t2m_rid=t2m_rid, variant_id=variant_id or 1)
-        else:
-            params = RerunParams(
-                t2m_rid=t2m_rid,
-                variant_id=variant_id or params.variant_id,
-                rerun=params.rerun,
-            )
-        rid = await self._process_job("text2motion", params.to_params_list())
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                await self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                asyncio.create_task(
-                    self._poll_job(
-                        rid,
-                        result_callback=result_callback,
-                        progress_callback=progress_callback,
-                        poll_interval=poll_interval,
-                        timeout=timeout,
-                    )
-                )
-        return rid
+            params = RerunParams()
+
+        return await self._start_and_poll(
+            "text2motion", params.to_params_list(t2m_rid, model_id),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     async def start_inpainting_job(
             self,
-            params: InpaintingParams,
+            t2m_rid: str,
+            prompt: str,
+            intervals: List[TimeInterval],
+            params: Optional[InpaintingParams] = None,
             result_callback: Optional[
                 Callable[[ResultCallbackData], Optional[Awaitable[None]]]
             ] = None,
@@ -428,31 +425,31 @@ class AsyncSaymotionClient:
             blocking: bool = True,
             timeout: Optional[int] = None,
     ) -> str:
-        rid = await self._process_job("text2motion", params.to_params_list())
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                await self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                asyncio.create_task(
-                    self._poll_job(
-                        rid,
-                        result_callback=result_callback,
-                        progress_callback=progress_callback,
-                        poll_interval=poll_interval,
-                        timeout=timeout,
-                    )
-                )
-        return rid
+        """Start inpainting job.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job
+            prompt: Inpainting prompt
+            intervals: Time intervals, e.g. [TimeInterval(start=0.5, end=2.0)]
+            params: Optional InpaintingParams for additional settings
+        """
+        if params is None:
+            params = InpaintingParams()
+
+        return await self._start_and_poll(
+            "text2motion", params.to_params_list(t2m_rid, prompt, intervals),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     async def start_merging_job(
             self,
-            params: MergingParams,
+            t2m_rid: str,
+            prompt: str,
+            params: Optional[MergingParams] = None,
             result_callback: Optional[
                 Callable[[ResultCallbackData], Optional[Awaitable[None]]]
             ] = None,
@@ -463,31 +460,29 @@ class AsyncSaymotionClient:
             blocking: bool = True,
             timeout: Optional[int] = None,
     ) -> str:
-        rid = await self._process_job("text2motion", params.to_params_list())
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                await self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                asyncio.create_task(
-                    self._poll_job(
-                        rid,
-                        result_callback=result_callback,
-                        progress_callback=progress_callback,
-                        poll_interval=poll_interval,
-                        timeout=timeout,
-                    )
-                )
-        return rid
+        """Start merging job.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job
+            prompt: Merging prompt
+            params: Optional MergingParams for additional settings
+        """
+        if params is None:
+            params = MergingParams()
+
+        return await self._start_and_poll(
+            "text2motion", params.to_params_list(t2m_rid, prompt),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     async def start_loop_job(
             self,
-            params: LoopParams,
+            t2m_rid: str,
+            params: Optional[LoopParams] = None,
             result_callback: Optional[
                 Callable[[ResultCallbackData], Optional[Awaitable[None]]]
             ] = None,
@@ -498,31 +493,28 @@ class AsyncSaymotionClient:
             blocking: bool = True,
             timeout: Optional[int] = None,
     ) -> str:
-        rid = await self._process_job("text2motion", params.to_params_list())
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                await self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                asyncio.create_task(
-                    self._poll_job(
-                        rid,
-                        result_callback=result_callback,
-                        progress_callback=progress_callback,
-                        poll_interval=poll_interval,
-                        timeout=timeout,
-                    )
-                )
-        return rid
+        """Start loop job.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job
+            params: Optional LoopParams for additional settings
+        """
+        if params is None:
+            params = LoopParams()
+
+        return await self._start_and_poll(
+            "text2motion", params.to_params_list(t2m_rid),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     async def start_refine_job(
             self,
-            params: RefineParams,
+            t2m_rid: str,
+            params: Optional[RefineParams] = None,
             result_callback: Optional[
                 Callable[[ResultCallbackData], Optional[Awaitable[None]]]
             ] = None,
@@ -533,27 +525,23 @@ class AsyncSaymotionClient:
             blocking: bool = True,
             timeout: Optional[int] = None,
     ) -> str:
-        rid = await self._process_job("text2motion", params.to_params_list())
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                await self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                asyncio.create_task(
-                    self._poll_job(
-                        rid,
-                        result_callback=result_callback,
-                        progress_callback=progress_callback,
-                        poll_interval=poll_interval,
-                        timeout=timeout,
-                    )
-                )
-        return rid
+        """Start refine job.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job
+            params: Optional RefineParams for additional settings
+        """
+        if params is None:
+            params = RefineParams()
+
+        return await self._start_and_poll(
+            "text2motion", params.to_params_list(t2m_rid),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     async def import_animate3d_job(
             self, rid: str, model: str, params: List[str]
@@ -686,6 +674,8 @@ class AsyncSaymotionClient:
         elif status:
             status_str = ",".join([s.value for s in status])
             path = f"/job/v1/list/{status_str}"
+        elif processor:
+            path = f"/job/v1/list/SUCCESS,PROGRESS,FAILURE/{processor}"
         else:
             path = "/job/v1/list"
         data = await self._request("GET", path)

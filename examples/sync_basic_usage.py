@@ -15,13 +15,10 @@ from dm.saymotion import (
     ProgressCallbackData,
 )
 
-# Configuration - replace with your credentials
-API_SERVER_URL = "https://service.deepmotion.com"
-CLIENT_ID = "your_client_id"
-CLIENT_SECRET = "your_client_secret"
-API_SERVER_URL = "https://api-saymotion.deepmotion.com:443"
-CLIENT_ID = "rCNtxev9KKEzW5ATiVSM6r"
-CLIENT_SECRET = "8hMLuANpV2nUjve4HReMAv"
+# Configuration - replace with your credentials or set environment variables
+API_SERVER_URL = os.environ.get("DM_API_SERVER_URL", "https://service.deepmotion.com")
+CLIENT_ID = os.environ.get("DM_CLIENT_ID", "your_client_id")
+CLIENT_SECRET = os.environ.get("DM_CLIENT_SECRET", "your_client_secret")
 
 OUTPUT_DIR = "./output"
 
@@ -72,11 +69,6 @@ def main():
 
     # Text prompt for motion generation
     prompt = "A person walking forward slowly"
-    params = Text2MotionParams(
-        prompt=prompt,
-        model_id=model_id,
-        requested_animation_duration=5.0,
-    )
 
     print(f"\n=== Starting text2motion job ===")
     print(f"Prompt: {prompt}")
@@ -84,7 +76,7 @@ def main():
     rid = client.start_new_job(
         prompt=prompt,
         model_id=model_id,
-        params=params,
+        params=Text2MotionParams(requested_animation_duration=5.0),
         result_callback=on_result,
         progress_callback=on_progress,
     )

@@ -1,4 +1,4 @@
-"""Enumerations for Animate 3D API."""
+"""Enumerations for Saymotion API."""
 
 from enum import Enum
 

@@ -26,6 +26,7 @@ from dm.saymotion.data.params import (
     MergingParams,
     LoopParams,
     RefineParams,
+    TimeInterval,
 )
 from dm.saymotion.data.response import DownloadLink
 from dm.saymotion.exceptions import (
@@ -86,6 +87,19 @@ class SaymotionClient:
         self.timeout = timeout
         self._session: Optional[requests.Session] = None
         self._authenticated = False
+
+    def close(self) -> None:
+        """Close the underlying HTTP session."""
+        if self._session is not None:
+            self._session.close()
+            self._session = None
+            self._authenticated = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     def _get_session(self) -> requests.Session:
         """Get or create authenticated session."""
@@ -329,6 +343,57 @@ class SaymotionClient:
 
     # ==================== Job API ====================
 
+    def _start_and_poll(
+            self,
+            processor: str,
+            params_list: List[str],
+            result_callback: Optional[Callable[[ResultCallbackData], None]] = None,
+            progress_callback: Optional[Callable[[ProgressCallbackData], None]] = None,
+            poll_interval: int = 5,
+            blocking: bool = True,
+            timeout: Optional[int] = None,
+    ) -> str:
+        """Submit a job and optionally poll for completion.
+
+        Args:
+            processor: Processor name ("text2motion" or "render")
+            params_list: List of "key=value" parameter strings
+            result_callback: Callback for job completion
+            progress_callback: Callback for progress updates
+            poll_interval: Seconds between status polls
+            blocking: Whether to block until job completes
+            timeout: Maximum wait time in seconds
+
+        Returns:
+            Request ID (rid)
+        """
+        rid = self._process_job(processor, params_list)
+
+        if blocking or progress_callback or result_callback:
+            if blocking:
+                self._poll_job(
+                    rid,
+                    result_callback=result_callback,
+                    progress_callback=progress_callback,
+                    poll_interval=poll_interval,
+                    timeout=timeout,
+                )
+            else:
+                thread = threading.Thread(
+                    target=self._poll_job,
+                    args=(rid,),
+                    kwargs={
+                        "result_callback": result_callback,
+                        "progress_callback": progress_callback,
+                        "poll_interval": poll_interval,
+                        "timeout": timeout,
+                    },
+                    daemon=True,
+                )
+                thread.start()
+
+        return rid
+
     def start_new_job(
             self,
             prompt: str,
@@ -345,7 +410,7 @@ class SaymotionClient:
         Args:
             prompt: Text prompt for motion generation
             model_id: Character model ID
-            params: Optional Text2MotionParams for additional options
+            params: Optional Text2MotionParams for additional settings
             result_callback: Callback for job completion
             progress_callback: Callback for progress updates
             poll_interval: Seconds between status polls
@@ -356,50 +421,20 @@ class SaymotionClient:
             Request ID (rid)
         """
         if params is None:
-            params = Text2MotionParams(prompt=prompt, model_id=model_id)
-        else:
-            params = Text2MotionParams(
-                prompt=prompt,
-                model_id=model_id,
-                dis=params.dis,
-                foot_locking_mode=params.foot_locking_mode,
-                pose_filtering_strength=params.pose_filtering_strength,
-                skip_fbx=params.skip_fbx,
-                num_variant=params.num_variant,
-                requested_animation_duration=params.requested_animation_duration,
-            )
+            params = Text2MotionParams()
 
-        rid = self._process_job("text2motion", params.to_params_list())
-
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                thread = threading.Thread(
-                    target=self._poll_job,
-                    args=(rid,),
-                    kwargs={
-                        "result_callback": result_callback,
-                        "progress_callback": progress_callback,
-                        "poll_interval": poll_interval,
-                        "timeout": timeout,
-                    },
-                    daemon=True,
-                )
-                thread.start()
-
-        return rid
+        return self._start_and_poll(
+            "text2motion", params.to_params_list(prompt, model_id),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     def start_render_job(
             self,
             t2m_rid: str,
-            variant_id: int,
             params: Optional[RenderParams] = None,
             result_callback: Optional[Callable[[ResultCallbackData], None]] = None,
             progress_callback: Optional[Callable[[ProgressCallbackData], None]] = None,
@@ -407,51 +442,28 @@ class SaymotionClient:
             blocking: bool = True,
             timeout: Optional[int] = None,
     ) -> str:
-        """Start render job (animation to video)."""
+        """Start render job (animation to video).
+
+        Args:
+            t2m_rid: Request ID of the text2motion job
+            params: Optional RenderParams for additional settings
+        """
         if params is None:
-            params = RenderParams(t2m_rid=t2m_rid, variant_id=variant_id)
-        else:
-            params = RenderParams(
-                t2m_rid=t2m_rid,
-                variant_id=variant_id,
-                bg_color=params.bg_color,
-                backdrop=params.backdrop,
-                shadow=params.shadow,
-                cam_mode=params.cam_mode,
-                cam_horizontal_angle=params.cam_horizontal_angle,
-            )
+            params = RenderParams()
 
-        rid = self._process_job("render", params.to_params_list())
-
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                thread = threading.Thread(
-                    target=self._poll_job,
-                    args=(rid,),
-                    kwargs={
-                        "result_callback": result_callback,
-                        "progress_callback": progress_callback,
-                        "poll_interval": poll_interval,
-                        "timeout": timeout,
-                    },
-                    daemon=True,
-                )
-                thread.start()
-
-        return rid
+        return self._start_and_poll(
+            "render", params.to_params_list(t2m_rid),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     def rerun_job(
             self,
             t2m_rid: str,
-            variant_id: Optional[int] = None,
+            model_id: str,
             params: Optional[RerunParams] = None,
             result_callback: Optional[Callable[[ResultCallbackData], None]] = None,
             progress_callback: Optional[Callable[[ProgressCallbackData], None]] = None,
@@ -459,182 +471,141 @@ class SaymotionClient:
             blocking: bool = True,
             timeout: Optional[int] = None,
     ) -> str:
-        """Rerun a text2motion job."""
+        """Rerun a text2motion job.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job to rerun
+            params: Optional RerunParams for additional settings
+        """
         if params is None:
-            params = RerunParams(t2m_rid=t2m_rid, variant_id=variant_id or 1)
-        else:
-            params = RerunParams(
-                t2m_rid=t2m_rid,
-                variant_id=variant_id or params.variant_id,
-                rerun=params.rerun,
-            )
+            params = RerunParams()
 
-        rid = self._process_job("text2motion", params.to_params_list())
-
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                thread = threading.Thread(
-                    target=self._poll_job,
-                    args=(rid,),
-                    kwargs={
-                        "result_callback": result_callback,
-                        "progress_callback": progress_callback,
-                        "poll_interval": poll_interval,
-                        "timeout": timeout,
-                    },
-                    daemon=True,
-                )
-                thread.start()
-
-        return rid
+        return self._start_and_poll(
+            "text2motion", params.to_params_list(t2m_rid, model_id),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     def start_inpainting_job(
             self,
-            params: InpaintingParams,
+            t2m_rid: str,
+            prompt: str,
+            intervals: List[TimeInterval],
+            params: Optional[InpaintingParams] = None,
             result_callback: Optional[Callable[[ResultCallbackData], None]] = None,
             progress_callback: Optional[Callable[[ProgressCallbackData], None]] = None,
             poll_interval: int = 5,
             blocking: bool = True,
             timeout: Optional[int] = None,
     ) -> str:
-        """Start inpainting job."""
-        rid = self._process_job("text2motion", params.to_params_list())
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                thread = threading.Thread(
-                    target=self._poll_job,
-                    args=(rid,),
-                    kwargs={
-                        "result_callback": result_callback,
-                        "progress_callback": progress_callback,
-                        "poll_interval": poll_interval,
-                        "timeout": timeout,
-                    },
-                    daemon=True,
-                )
-                thread.start()
-        return rid
+        """Start inpainting job.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job
+            prompt: Inpainting prompt
+            intervals: Time intervals, e.g. [TimeInterval(start=0.5, end=2.0)]
+            params: Optional InpaintingParams for additional settings
+        """
+        if params is None:
+            params = InpaintingParams()
+
+        return self._start_and_poll(
+            "text2motion", params.to_params_list(t2m_rid, prompt, intervals),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     def start_merging_job(
             self,
-            params: MergingParams,
+            t2m_rid: str,
+            prompt: str,
+            params: Optional[MergingParams] = None,
             result_callback: Optional[Callable[[ResultCallbackData], None]] = None,
             progress_callback: Optional[Callable[[ProgressCallbackData], None]] = None,
             poll_interval: int = 5,
             blocking: bool = True,
             timeout: Optional[int] = None,
     ) -> str:
-        """Start merging job."""
-        rid = self._process_job("text2motion", params.to_params_list())
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                thread = threading.Thread(
-                    target=self._poll_job,
-                    args=(rid,),
-                    kwargs={
-                        "result_callback": result_callback,
-                        "progress_callback": progress_callback,
-                        "poll_interval": poll_interval,
-                        "timeout": timeout,
-                    },
-                    daemon=True,
-                )
-                thread.start()
-        return rid
+        """Start merging job.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job
+            prompt: Merging prompt
+            params: Optional MergingParams for additional settings
+        """
+        if params is None:
+            params = MergingParams()
+
+        return self._start_and_poll(
+            "text2motion", params.to_params_list(t2m_rid, prompt),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     def start_loop_job(
             self,
-            params: LoopParams,
+            t2m_rid: str,
+            params: Optional[LoopParams] = None,
             result_callback: Optional[Callable[[ResultCallbackData], None]] = None,
             progress_callback: Optional[Callable[[ProgressCallbackData], None]] = None,
             poll_interval: int = 5,
             blocking: bool = True,
             timeout: Optional[int] = None,
     ) -> str:
-        """Start loop job."""
-        rid = self._process_job("text2motion", params.to_params_list())
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                thread = threading.Thread(
-                    target=self._poll_job,
-                    args=(rid,),
-                    kwargs={
-                        "result_callback": result_callback,
-                        "progress_callback": progress_callback,
-                        "poll_interval": poll_interval,
-                        "timeout": timeout,
-                    },
-                    daemon=True,
-                )
-                thread.start()
-        return rid
+        """Start loop job.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job
+            params: Optional LoopParams for additional settings
+        """
+        if params is None:
+            params = LoopParams()
+
+        return self._start_and_poll(
+            "text2motion", params.to_params_list(t2m_rid),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     def start_refine_job(
             self,
-            params: RefineParams,
+            t2m_rid: str,
+            params: Optional[RefineParams] = None,
             result_callback: Optional[Callable[[ResultCallbackData], None]] = None,
             progress_callback: Optional[Callable[[ProgressCallbackData], None]] = None,
             poll_interval: int = 5,
             blocking: bool = True,
             timeout: Optional[int] = None,
     ) -> str:
-        """Start refine job."""
-        rid = self._process_job("text2motion", params.to_params_list())
-        if blocking or progress_callback or result_callback:
-            if blocking:
-                self._poll_job(
-                    rid,
-                    result_callback=result_callback,
-                    progress_callback=progress_callback,
-                    poll_interval=poll_interval,
-                    timeout=timeout,
-                )
-            else:
-                thread = threading.Thread(
-                    target=self._poll_job,
-                    args=(rid,),
-                    kwargs={
-                        "result_callback": result_callback,
-                        "progress_callback": progress_callback,
-                        "poll_interval": poll_interval,
-                        "timeout": timeout,
-                    },
-                    daemon=True,
-                )
-                thread.start()
-        return rid
+        """Start refine job.
+
+        Args:
+            t2m_rid: Request ID of the text2motion job
+            params: Optional RefineParams for additional settings
+        """
+        if params is None:
+            params = RefineParams()
+
+        return self._start_and_poll(
+            "text2motion", params.to_params_list(t2m_rid),
+            result_callback=result_callback,
+            progress_callback=progress_callback,
+            poll_interval=poll_interval,
+            blocking=blocking,
+            timeout=timeout,
+        )
 
     def import_animate3d_job(
             self,
@@ -775,6 +746,8 @@ class SaymotionClient:
         elif status:
             status_str = ",".join([s.value for s in status])
             path = f"/job/v1/list/{status_str}"
+        elif processor:
+            path = f"/job/v1/list/SUCCESS,PROGRESS,FAILURE/{processor}"
         else:
             path = "/job/v1/list"
 
@@ -837,14 +810,10 @@ class SaymotionClient:
                 file_type = file_info.file_type
                 file_url = file_info.url
 
-                if file_type == "mp4":
-                    output_file = os.path.join(
-                        output_dir_with_rid, f"{name}.{file_type}"
-                    )
-                else:
-                    output_file = os.path.join(
-                        output_dir_with_rid, f"{name}.{file_type}"
-                    )
+                ext = "zip" if file_type == "fbx" else file_type
+                output_file = os.path.join(
+                    output_dir_with_rid, f"{name}.{ext}"
+                )
 
                 file_response = session.get(file_url, timeout=self.timeout)
                 file_response.raise_for_status()

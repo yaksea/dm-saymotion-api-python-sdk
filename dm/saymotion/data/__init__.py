@@ -6,6 +6,7 @@ from dm.saymotion.data.job_status import JobStatus, JobStatusDetails
 from dm.saymotion.data.character import CharacterModel
 from dm.saymotion.data.params import (
     ProcessParams,
+    TimeInterval,
     Text2MotionParams,
     RenderParams,
     RerunParams,
@@ -23,6 +24,7 @@ __all__ = [
     "JobStatusDetails",
     "CharacterModel",
     "ProcessParams",
+    "TimeInterval",
     "Text2MotionParams",
     "RenderParams",
     "RerunParams",

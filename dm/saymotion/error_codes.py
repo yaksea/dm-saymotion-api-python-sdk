@@ -1,25 +1,39 @@
-"""Error code mappings for Animate 3D API."""
+"""Error code mappings for Saymotion REST API.
+
+Based on "Saymotion Restful API Error Codes" section in api_doc.md.
+"""
 
 from typing import Any, Optional
 
-# Error code to message mapping
+# Saymotion REST API error codes
 ERROR_CODES = {
-    101: "Not enough credits",
-    201: "Error downloading the video or DM asset",
-    202: "Error converting the video",
-    503: "Error processing the parameters",
-    504: "Error loading the character assets",
-    505: "Physics Filter is incompatible with the custom characters",
-    506: "Error creating the pose estimation",
-    507: "Error while processing the body tracking",
-    508: "Input video or image doesn't meet the requirements to generate animations of good quality",
-    509: "Error loading the configurations",
-    510: "Error open internal files",
-    511: "Processing interrupted",
-    513: "Failed to detect character in the video",
-    599: "Body tracking timeout",
-    701: "Error processing the face tracking",
-    799: "Face tracking timeout",
+    # General
+    101: "Not enough credit",
+    # Pipeline
+    494: "Invalid pipeline input",
+    498: "Unknown pipeline error",
+    # Motion generation
+    501: "Error while generating motion",
+    502: "Error parsing motion generation parameters",
+    599: "Motion generation timeout",
+    # Pose tracking
+    603: "Error processing pose tracking parameters",
+    604: "Error loading animation data for pose tracking",
+    605: "Physics Filter is incompatible with used custom character",
+    607: "Error while processing the body tracking",
+    610: "Error saving pose tracking intermediate results",
+    699: "Pose tracking timeout",
+    # Pose correction
+    703: "Error processing pose correction parameters",
+    704: "Error loading the character animation assets for pose corrections",
+    710: "Error saving pose correction intermediate results",
+    799: "Pose correction timeout",
+    # BVH exporting
+    803: "Error processing bvh exporter parameters",
+    804: "Error loading the character animation assets for bvh exporting",
+    810: "Error saving bvh results",
+    899: "Bvh exporting timeout",
+    # Custom character / animation baking
     901: "Error loading the mesh of the custom character",
     902: "Error loading the BVH custom character",
     903: "Error copying animations onto the custom character",
@@ -30,15 +44,12 @@ ERROR_CODES = {
     908: "Error loading facial tracking data",
     909: "Error loading the metadata of the custom character",
     999: "Animation baking timeout",
-    1301: "Error creating the hand estimation",
-    1302: "Error creating the hand estimation",
-    1303: "Error creating the hand estimation",
-    1304: "Error opening the video",
-    1305: "Error parsing video path",
-    1306: "Error loading internal files",
-    1307: "Error processing hand tracking",
-    1308: "Error processing the video",
-    1399: "Hand tracking timeout",
+    # Rendering
+    1101: "Process stuck",
+    1102: "Invalid input parameter",
+    1105: "Failed to load input character",
+    1106: "Failed to attach animation to character",
+    1107: "Failed to configure backdrop",
 }
 
 

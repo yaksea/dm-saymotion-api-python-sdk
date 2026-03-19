@@ -1,8 +1,8 @@
-"""Custom exceptions for Animate 3D API."""
+"""Custom exceptions for Saymotion API."""
 
 
 class Animate3DError(Exception):
-    """Base exception for all Animate 3D API errors."""
+    """Base exception for all Saymotion API errors (kept as Animate3DError for backward compatibility)."""
 
     pass
 
