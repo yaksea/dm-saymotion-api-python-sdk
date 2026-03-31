@@ -24,7 +24,7 @@ client = SaymotionClient(
 balance = client.get_credit_balance()
 print(f"Credit balance: {balance}")
 
-all_models = client.list_character_models(stock_model="deepmotion")
+all_models = client.list_character_models()
 model_id = all_models[0].id if all_models else None
 
 
@@ -73,7 +73,7 @@ async def main():
         balance = await client.get_credit_balance()
         print(f"Credit balance: {balance}")
 
-        all_models = await client.list_character_models(stock_model="deepmotion")
+        all_models = await client.list_character_models()
         model_id = all_models[0].id if all_models else None
 
         if not model_id:
@@ -135,7 +135,7 @@ Both clients support the same constructor parameters:
 
 | Method | Parameters | Returns | Description |
 |--------|------------|---------|-------------|
-| `list_character_models` | model_id?, search_token?, stock_model? | List[CharacterModel] | List available models |
+| `list_character_models` | model_id?, search_token?, only_custom? | List[CharacterModel] | List available models. Default sends `stockModel=all`; pass `only_custom=True` for custom models only |
 | `upload_character_model` | source, name?, create_thumb? | str (model_id) | Upload or store a model. `source` can be a local file path or HTTP URL |
 | `delete_character_model` | model_id | int (count) | Delete a model |
 

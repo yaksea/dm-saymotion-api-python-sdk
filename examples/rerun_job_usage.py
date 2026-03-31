@@ -64,8 +64,8 @@ def main():
 
     print(f"Rerunning job RID: {rid}, variant_id: {variant_id}")
 
-    # Get a character model ID (use stockModel for built-in models)
-    all_models = client.list_character_models(stock_model="deepmotion")
+    # Get a character model ID
+    all_models = client.list_character_models()
     if not all_models:
         print("No models found")
         return

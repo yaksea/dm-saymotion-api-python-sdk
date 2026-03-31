@@ -60,7 +60,7 @@ async def main():
             return
 
         # Get a character model ID
-        all_models = await client.list_character_models(stock_model="deepmotion")
+        all_models = await client.list_character_models()
         if not all_models:
             print("No models found")
             return

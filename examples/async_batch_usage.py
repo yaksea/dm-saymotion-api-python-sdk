@@ -49,7 +49,7 @@ async def main():
         client_id=CLIENT_ID,
         client_secret=CLIENT_SECRET,
     ) as client:
-        all_models = await client.list_character_models(stock_model="deepmotion")
+        all_models = await client.list_character_models()
         if not all_models:
             print("No models found")
             return

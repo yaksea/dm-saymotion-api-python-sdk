@@ -26,8 +26,8 @@ def main():
     # ========================================
     # List Character Models
     # ========================================
-    print("=== Listing All Models (with stock) ===")
-    all_models = client.list_character_models(stock_model="deepmotion")
+    print("=== Listing All Models ===")
+    all_models = client.list_character_models()
 
     print("\nAll Models:")
     for model in all_models:

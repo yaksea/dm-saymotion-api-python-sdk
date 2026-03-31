@@ -52,7 +52,7 @@ def main():
         client_secret=CLIENT_SECRET,
     )
 
-    all_models = client.list_character_models(stock_model="deepmotion")
+    all_models = client.list_character_models()
     if not all_models:
         print("No models found")
         return

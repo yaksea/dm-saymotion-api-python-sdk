@@ -204,14 +204,14 @@ class SaymotionClient:
             self,
             model_id: Optional[str] = None,
             search_token: Optional[str] = None,
-            stock_model: Optional[str] = None,
+            only_custom: Optional[bool] = None,
     ) -> List[CharacterModel]:
         """List character models.
 
         Args:
             model_id: Specific model ID to retrieve
             search_token: Search by model name
-            stock_model: "deepmotion", "roblox" or omit for custom only
+            only_custom: If True, list custom models only. If False or None, request stockModel=all.
 
         Returns:
             List of CharacterModel objects
@@ -221,8 +221,8 @@ class SaymotionClient:
             params["modelId"] = model_id
         if search_token:
             params["searchToken"] = search_token
-        if stock_model:
-            params["stockModel"] = stock_model
+        if not only_custom:
+            params["stockModel"] = "all"
 
         response = self._request("GET", "/character/v1/listModels", params=params)
         data = response.json()
