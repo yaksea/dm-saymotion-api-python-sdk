@@ -1,19 +1,19 @@
 """Custom exceptions for Saymotion API."""
 
 
-class Animate3DError(Exception):
-    """Base exception for all Saymotion API errors (kept as Animate3DError for backward compatibility)."""
+class SaymotionError(Exception):
+    """Base exception for all Saymotion API errors."""
 
     pass
 
 
-class AuthenticationError(Animate3DError):
+class AuthenticationError(SaymotionError):
     """Raised when authentication fails."""
 
     pass
 
 
-class APIError(Animate3DError):
+class APIError(SaymotionError):
     """Raised when API call fails with an error code."""
 
     def __init__(self, message: str, status_code: int = None, error_code: int = None):
@@ -22,13 +22,13 @@ class APIError(Animate3DError):
         self.error_code = error_code
 
 
-class ValidationError(Animate3DError):
+class ValidationError(SaymotionError):
     """Raised when input validation fails."""
 
     pass
 
 
-class TimeoutError(Animate3DError):
+class TimeoutError(SaymotionError):
     """Raised when operation times out."""
 
     def __init__(self, message: str, rid: str = None):

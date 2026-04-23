@@ -15,9 +15,9 @@ from dm.saymotion import (
 )
 
 # Configuration - replace with your credentials or set environment variables
-API_SERVER_URL = os.environ.get("DM_API_SERVER_URL", "https://service.deepmotion.com")
-CLIENT_ID = os.environ.get("DM_CLIENT_ID", "your_client_id")
-CLIENT_SECRET = os.environ.get("DM_CLIENT_SECRET", "your_client_secret")
+API_SERVER_URL = os.environ.get("DM_SAYMOTION_API_SERVER_URL", "https://api-saymotion.deepmotion.com:443")
+CLIENT_ID = os.environ.get("DM_SAYMOTION_CLIENT_ID", "your_client_id")
+CLIENT_SECRET = os.environ.get("DM_SAYMOTION_CLIENT_SECRET", "your_client_secret")
 
 
 def on_progress(data: ProgressCallbackData):
@@ -46,39 +46,38 @@ def main():
             if pending_count <= 0:
                 all_done.set()
 
-    client = SaymotionClient(
+    with SaymotionClient(
         api_server_url=API_SERVER_URL,
         client_id=CLIENT_ID,
         client_secret=CLIENT_SECRET,
-    )
+    ) as client:
+        all_models = client.list_character_models()
+        if not all_models:
+            print("No models found")
+            return
+        model_id = all_models[0].id
 
-    all_models = client.list_character_models()
-    if not all_models:
-        print("No models found")
-        return
-    model_id = all_models[0].id
+        prompts = [
+            "A person walking forward slowly",
+            "A person waving hello",
+            "A person sitting down",
+        ]
 
-    prompts = [
-        "A person walking forward slowly",
-        "A person waving hello",
-        "A person sitting down",
-    ]
+        print("=== Submitting jobs ===")
+        pending_count = len(prompts)
+        for prompt in prompts:
+            rid = client.start_new_job(
+                prompt=prompt,
+                model_id=model_id,
+                progress_callback=on_progress,
+                result_callback=on_result,
+                poll_interval=10,
+                blocking=False,
+            )
+            print(f"Submitted: {prompt[:30]}... -> Job ID: {rid}")
 
-    print("=== Submitting jobs ===")
-    pending_count = len(prompts)
-    for prompt in prompts:
-        rid = client.start_new_job(
-            prompt=prompt,
-            model_id=model_id,
-            progress_callback=on_progress,
-            result_callback=on_result,
-            poll_interval=10,
-            blocking=False,
-        )
-        print(f"Submitted: {prompt[:30]}... -> Job ID: {rid}")
-
-    all_done.wait()
-    print("\n=== All jobs processed ===")
+        all_done.wait()
+        print("\n=== All jobs processed ===")
 
 
 if __name__ == "__main__":

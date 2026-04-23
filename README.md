@@ -110,9 +110,9 @@ asyncio.run(main())
 Credentials can be set via environment variables:
 
 ```bash
-export DM_API_SERVER_URL="https://service.deepmotion.com"
-export DM_CLIENT_ID="your_client_id"
-export DM_CLIENT_SECRET="your_client_secret"
+export DM_SAYMOTION_API_SERVER_URL="https://api-saymotion.deepmotion.com:443"
+export DM_SAYMOTION_CLIENT_ID="your_client_id"
+export DM_SAYMOTION_CLIENT_SECRET="your_client_secret"
 ```
 
 ## API Reference
@@ -301,7 +301,7 @@ See the `examples/` directory:
 
 ```python
 from dm.saymotion import (
-    Animate3DError,
+    SaymotionError,
     AuthenticationError,
     APIError,
     ValidationError,
@@ -318,6 +318,8 @@ except APIError as e:
     print(f"API error: {e}, status: {e.status_code}")
 except ValidationError as e:
     print(f"Invalid input: {e}")
+except SaymotionError as e:
+    print(f"SayMotion SDK error: {e}")
 ```
 
 In result callbacks:

@@ -613,7 +613,7 @@ class SaymotionClient:
             model: str,
             params: List[str],
     ) -> str:
-        """Import Animate3D job to Saymotion."""
+        """Import an Animate3D job to Saymotion."""
         body = {"model": model, "params": params}
         response = self._request(
             "POST", f"/job/v1/import/animate3d/{rid}", json_data=body
@@ -856,7 +856,3 @@ class SaymotionClient:
         response = self._request("GET", "/account/v1/creditBalance")
         data = response.json()
         return math.floor(data.get("credits", 0))
-
-
-# Backward compatibility alias
-Animate3DClient = SaymotionClient

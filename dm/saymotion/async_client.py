@@ -783,7 +783,3 @@ class AsyncSaymotionClient:
     async def get_credit_balance(self) -> float:
         data = await self._request("GET", "/account/v1/creditBalance")
         return math.floor(data.get("credits", 0))
-
-
-# Backward compatibility alias
-AsyncAnimate3DClient = AsyncSaymotionClient

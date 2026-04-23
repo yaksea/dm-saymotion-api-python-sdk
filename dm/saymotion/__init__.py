@@ -3,8 +3,8 @@
 This module provides synchronous and asynchronous clients for the Saymotion REST API.
 """
 
-from dm.saymotion.client import SaymotionClient, Animate3DClient
-from dm.saymotion.async_client import AsyncSaymotionClient, AsyncAnimate3DClient
+from dm.saymotion.client import SaymotionClient
+from dm.saymotion.async_client import AsyncSaymotionClient
 from dm.saymotion.data.params import (
     ProcessParams,
     TimeInterval,
@@ -28,7 +28,7 @@ from dm.saymotion.data.callback import (
 from dm.saymotion.data.character import CharacterModel
 from dm.saymotion.data.response import DownloadLink, DownloadUrl, DownloadFile
 from dm.saymotion.exceptions import (
-    Animate3DError,
+    SaymotionError,
     AuthenticationError,
     APIError,
     ValidationError,
@@ -38,9 +38,7 @@ from dm.saymotion.exceptions import (
 __all__ = [
     # Clients
     "SaymotionClient",
-    "Animate3DClient",
     "AsyncSaymotionClient",
-    "AsyncAnimate3DClient",
     # Parameters
     "ProcessParams",
     "TimeInterval",
@@ -65,7 +63,7 @@ __all__ = [
     "DownloadUrl",
     "DownloadFile",
     # Exceptions
-    "Animate3DError",
+    "SaymotionError",
     "AuthenticationError",
     "APIError",
     "ValidationError",
